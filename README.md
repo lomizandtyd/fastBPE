@@ -9,7 +9,7 @@ Fix compat by [klauspost's mman project](https://github.com/klauspost/mman-win32
 ## Release (win32)
 ```
 # clone the repository
-git clont https://github.com/lomizandtyd/fastBPE
+git clone https://github.com/lomizandtyd/fastBPE
 
 # run CLI: dist\fast.exe
 

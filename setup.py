@@ -1,6 +1,6 @@
+import sys
 from setuptools import setup, find_packages, Extension
 from distutils.command.sdist import sdist as _sdist
-
 
 try:
     from Cython.Build import cythonize
@@ -11,21 +11,43 @@ else:
 
 
 if use_cython:
+    print("build under cython")
     extension = 'pyx'
 else:
     extension = 'cpp'
 
 
-extensions = [
-    Extension(
-        'fastBPE',
-        [ "fastBPE/fastBPE." + extension ],
-        language='c++',
-        extra_compile_args=[
-            "-std=c++11", "-Ofast", "-pthread"
-        ],
-    ),
-]
+if "linux" in sys.platform:
+    extensions = [
+        Extension(
+            'fastBPE',
+            [
+                "fastBPE/fastBPE." + extension,
+            ],
+            language='c++',
+            extra_compile_args=[
+                "-O3",
+                "-pthread",
+                "-std=c++11"
+            ],
+        ),
+    ]
+else:
+    print(sys.platform)
+    extensions = [
+        Extension(
+            'fastBPE',
+            [
+                "fastBPE/fastBPE." + extension,
+                "fastBPE/compat/mman.c"
+            ],
+            language='c++',
+            extra_compile_args=[
+                "/O2"
+            ],
+        ),
+    ]
+
 if use_cython:
     extensions = cythonize(extensions)
 

@@ -1,4 +1,33 @@
 
+# fastBPE-win32
+
+Ugly add win32 support for fastBPE. It could also be compiled under linux.
+
+## Thanks
+Fix compat by [klauspost's mman project](https://github.com/klauspost/mman-win32) and [AShelly's unistd.h](https://stackoverflow.com/a/826027/5557571).
+
+## Release (win32)
+```
+# clone the repository
+git clont https://github.com/lomizandtyd/fastBPE
+
+# run CLI: dist\fast.exe
+
+# install python package
+python.exe -m easy_install dist\fastBPE-0.1.1-py3.7-win-amd32.egg
+```
+
+## Build for yourself (win32)
+Need Visual Studio installed.
+
+1. Clone the project and cd the top directory
+2. Change the path of `vcvars64.bat` in `build_win32.bat` to your VS install path.
+3. Open cmd and run `build_win32.bat`, you'll get the executable `fast.exe` at `build\win32\fast.exe`.
+
+-------------------------------
+# copy from original repository
+-------------------------------
+
 # fastBPE
 
 C++ implementation of [Neural Machine Translation of Rare Words with Subword Units](https://arxiv.org/abs/1508.07909), with Python API.

@@ -10,16 +10,26 @@
 #include <list>
 #include <set>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string>
 #include <cstring>
-#include <sys/mman.h>
-#include <sys/stat.h>
 #include <thread>
-#include <unistd.h> // ftruncate
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#ifndef _MSC_VER
+#include <unistd.h> // ftruncate
+#include <sys/mman.h>
+#include <sys/stat.h>
+#else
+#include "compat/mman.h" 
+#include <io.h>
+#define ftruncate _chsize
+#define mode_t int
+#define open _open
+#define close _close
+#endif
 
 namespace fastBPE {
 
@@ -81,7 +91,7 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
       deal_with_char(f[i]);
     }
   }
-  fprintf(stderr, "Read %lu words (%lu unique) from text file.\n", total,
+  fprintf(stderr, "Read %llu words (%IIu unique) from text file.\n", total,
           word_count.size());
 }
 
@@ -135,7 +145,7 @@ void outputText(const char *fpo, const char *fp,
   size_t out_size = p.first;
 
   if (ftruncate(fdOut, out_size) < 0) {
-    fprintf(stderr, "Couldn't truncate output file %s to size %lu\n", fpo,
+    fprintf(stderr, "Couldn't truncate output file %s to size %zu\n", fpo,
             out_size);
     exit(EXIT_FAILURE);
   }
@@ -147,7 +157,7 @@ void outputText(const char *fpo, const char *fp,
     exit(EXIT_FAILURE);
   }
   p = output_or_count(bpe, size, f, fo);
-  fprintf(stderr, "Modified %lu words from text file.\n", p.second);
+  fprintf(stderr, "Modified %llu words from text file.\n", p.second);
   munmap(fo, out_size);
   munmap(f, size);
   close(fdOut);
@@ -270,7 +280,7 @@ void find_maxp(vector<pair<int32_t, tp>> &contiguous_counts, tp &maxp,
     if (x.first > max_c) {
       max_c = x.first;
       maxp = x.second;
-    } else if (x.first == max_c and x.second < maxp) {
+    } else if (x.first == max_c && x.second < maxp) {
       maxp = x.second;
     }
   }
@@ -436,7 +446,7 @@ void readVocab(const char *fp, unordered_map<string, uint32_t> &vocab) {
     vocab[splits[0]] = count;
     total += count;
   }
-  fprintf(stderr, "Read %lu words (%lu unique) from vocabulary file.\n", total,
+  fprintf(stderr, "Read %llu words (%llu unique) from vocabulary file.\n", total,
           vocab.size());
 }
 
@@ -460,7 +470,7 @@ void readCodes(const char *fp, unordered_map<tps, uint32_t, pair_hash> &codes,
     codes[pair] = codes.size();
     reversed_codes[concat] = pair;
   }
-  fprintf(stderr, "Read %lu codes from the codes file.\n", codes.size());
+  fprintf(stderr, "Read %llu codes from the codes file.\n", codes.size());
 }
 
 void decompose(const string s, vector<string> &newSubwords,
@@ -547,13 +557,13 @@ string process_bpe(vector<string> &subwords,
     bool justMerged = false;
     newSubwords = vector<string>();
     for (size_t i = 0; i < subwords.size(); i++) {
-      if ((i + 1 < subwords.size()) && (not justMerged) &&
+      if ((i + 1 < subwords.size()) && (! justMerged) &&
           subwords[i] == bestPair->first.first &&
           subwords[i + 1] == bestPair->first.second) {
         newSubwords.push_back(subwords[i] + subwords[i + 1]);
         justMerged = true;
       } else {
-        if (not justMerged) {
+        if (! justMerged) {
           newSubwords.push_back(subwords[i]);
         }
         justMerged = false;
@@ -605,7 +615,8 @@ void applybpe(const char *outputFile, const char *inputFile,
   }
 
   // apply BPE codes to each word
-  unordered_map<string, string> bpe[kThreads];
+  vector<unordered_map<string, string> > bpe(kThreads, unordered_map<string, string>()) ;
+
   vector<thread> threads;
   for (size_t i = 0; i < kThreads; i++) {
     threads.emplace_back(
@@ -626,6 +637,7 @@ void applybpe(const char *outputFile, const char *inputFile,
       final_bpe[x.first] = x.second;
     }
   }
+  
   // output
   outputText(outputFile, inputFile, final_bpe);
 }

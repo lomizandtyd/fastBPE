@@ -29,6 +29,9 @@ int main(int argc, char **argv) {
   } else if (command == "learnbpe") {
     assert(argc == 4 || argc == 5);
     learnbpe(stoi(argv[2]), argv[3], argc == 5 ? argv[4] : "");
+  } else if (command == "learnbpe_vocab") {
+    assert(argc == 4);
+    learnbpe_vocab(stoi(argv[2]), argv[3]);
   } else if (command == "applybpe") {
     assert(argc == 5 || argc == 6);
     applybpe(argv[2], argv[3], argv[4], argc == 6 ? argv[5] : "");

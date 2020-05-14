@@ -23,12 +23,16 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #else
+#include <sys/stat.h>
 #include "compat/mman.h" 
 #include <io.h>
 #define ftruncate _chsize
 #define mode_t int
 #define open _open
+#define O_RDONLY _O_RDONLY
 #define close _close
+#define fstat _fstat64 // fix large file in windows
+#define stat __stat64
 #endif
 
 namespace fastBPE {
@@ -44,18 +48,38 @@ const size_t kTokenDelimLength = 2;
 
 int safeOpen(const char *file_path, int flags, mode_t mode = 0) {
   int fd = open(file_path, flags, mode);
-  if (fd < 0) {
-    fprintf(stderr, "Cannot open text file %s\n", file_path);
+  if (fd < 0 || errno != 0) {
+    fprintf(stderr, "Cannot open text file %s, error code %d\n", file_path, errno);
     exit(EXIT_FAILURE);
   }
   return fd;
+}
+
+void readTextSlow(const char *fp, unordered_map<string, uint32_t> &word_count) {
+
+  fprintf(stderr, "Loading vocabulary from %s ...\n", fp);
+  ifstream inf(fp);
+  if (inf.fail()) {
+    fprintf(stderr, "Cannot open text file %s\n", fp);
+    exit(EXIT_FAILURE);
+  }
+  std::string word;
+  uint64_t total = 0;
+  while (inf >> word) {
+    auto it = word_count.find(word);
+    int count = it != word_count.end() ? it->second:0;
+    word_count[word] = count + 1;
+    total ++;
+  }
+  fprintf(stderr, "Read %llu words (%IIu unique) from text file.\n", total,
+          word_count.size());
 }
 
 void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
   string cur_word;
   uint64_t total = 0;
   auto deal_with_char = [&](char cur_char){
-    if (cur_char == ' ' || cur_char == '\n') {
+    if (cur_char == ' ' || cur_char == '\n' || cur_char == '\r') {
       if (cur_word.size() == 0)
         return;
       // end of word
@@ -72,7 +96,8 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
   if (string(fp).compare("-") == 0) {
     for (std::string line; std::getline(std::cin, line);) {
       for(char c: line){
-        deal_with_char(c);
+        if (c != '\r')
+          deal_with_char(c);
       }
       deal_with_char('\n');
     }
@@ -86,9 +111,11 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
 
     size_t size = s.st_size;
     char *f = (char *)mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    fprintf(stderr, "file size %zd...\n", size);
 
     for (size_t i = 0; i < size; i++) {
-      deal_with_char(f[i]);
+      if (f[i] != '\r')
+        deal_with_char(f[i]);
     }
   }
   fprintf(stderr, "Read %llu words (%IIu unique) from text file.\n", total,
@@ -103,7 +130,8 @@ std::pair<size_t, uint64_t> output_or_count(
   uint64_t total = 0;
   for (size_t i = 0; i < size; i++) {
     auto &cur_char = f[i];
-    if (cur_char == ' ' || cur_char == '\n') {
+    if (cur_char == ' ' || cur_char == '\n' || cur_char == '\r') {
+      if (cur_char == '\r') continue;
       if (cur_word.size() == 0) {
         if (fo != nullptr) fo[charOut] = cur_char;
         charOut++;
@@ -305,18 +333,11 @@ void getvocab(const char *inputFile1, const char *inputFile2) {
 
   // print sorted vocab
   for (auto element : sorted_vocab)
-    cout << element.first << " " << element.second << endl;
+    cout << element.first << "\t" << element.second << endl;
 }
 
-void learnbpe(const uint32_t kNPairs, const char *inputFile1,
-              const char *inputFile2) {
-  // get vocab
-  unordered_map<string, uint32_t> word_count;
-  readText(inputFile1, word_count);
-  if (strcmp(inputFile2, "") != 0) {
-    readText(inputFile2, word_count);
-  }
-
+void learnbpedirect(const uint32_t kNPairs, unordered_map<string, uint32_t> word_count) {
+  fprintf(stderr, "Creating bpes codes...\n");
   // a token is an int, it represents a string
   unordered_map<string, uint32_t> token_to_int;
   vector<string> int_to_token;
@@ -343,8 +364,8 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
   for (size_t i = 0; i < kNPairs; i++) {
     // create new token for pair. replace
     auto new_token = int_to_token[max_p.first] + int_to_token[max_p.second];
-    cout << int_to_token[max_p.first] << " " << int_to_token[max_p.second]
-         << " " << max_c << endl;
+    cout << int_to_token[max_p.first] << "\t" << int_to_token[max_p.second]
+         << "\t" << max_c << endl;
 
     uint32_t new_token_id = int_to_token.size();
     int_to_token.push_back(new_token);
@@ -417,6 +438,18 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
   }
 }
 
+void learnbpe(const uint32_t kNPairs, const char *inputFile1,
+              const char *inputFile2) {
+  // get vocab
+  unordered_map<string, uint32_t> word_count;
+  readText(inputFile1, word_count);
+  if (strcmp(inputFile2, "") != 0) {
+    readText(inputFile2, word_count);
+  }
+  learnbpedirect(kNPairs, word_count);
+}
+
+
 void split(vector<string> &splits, const string &text, char sep) {
   size_t start = 0, end = 0;
   while ((end = text.find(sep, start)) != string::npos) {
@@ -439,7 +472,7 @@ void readVocab(const char *fp, unordered_map<string, uint32_t> &vocab) {
   uint64_t total = 0;
   while (getline(file, line)) {
     vector<string> splits;
-    split(splits, line, ' ');
+    split(splits, line, '\t');
     assert(splits.size() == 2);
     assert(vocab.find(splits[0]) == vocab.end());
     int count = stoi(splits[1]);
@@ -461,7 +494,7 @@ void readCodes(const char *fp, unordered_map<tps, uint32_t, pair_hash> &codes,
   string line;
   while (getline(file, line)) {
     vector<string> splits;
-    split(splits, line, ' ');
+    split(splits, line, '\t');
     assert(splits.size() == 3);
     auto pair = make_pair(splits[0], splits[1]);
     string concat = splits[0] + splits[1];
@@ -655,6 +688,33 @@ public:
     readCodes(codesPath.c_str(), codes, reversed_codes);
   }
 
+  string apply_str(string sentence) {
+    string cur = "";
+    vector<string> words;
+    split(words, sentence, ' ');
+    for (size_t i = 0; i < words.size(); i++) {
+        auto word = words[i];
+        vector<string> word_bpes;
+        int pos = 0, realLength = 0;
+        int lastStart = 0;
+        while (word[pos]) {
+            bool newChar = (word[pos] & 0xc0) != 0x80; // not a continuation byte
+            realLength += newChar;
+            if (newChar && pos > 0) {
+                auto new_token = word.substr(lastStart, pos - lastStart);
+                word_bpes.push_back(new_token);
+                lastStart = pos;
+            }
+            pos++;
+        }
+        auto bpe = word.substr(lastStart, string::npos) + kEndWord;
+        word_bpes.push_back(bpe);
+        cur += process_bpe(word_bpes, codes, reversed_codes, vocab);
+        if (i < words.size() - 1) cur += " ";
+    }
+    return cur;
+  }
+
   vector<string> apply(vector<string>& sentences) {
     vector<string> res;
     for(auto &s: sentences) {
@@ -699,6 +759,12 @@ void applybpe_stream(const char *codesPath, const char *vocabPath) {
       std::cout << l << std::endl;
     }
   }
+}
+
+void learnbpe_vocab(const uint32_t kNPairs, const char *vocabFile) {
+  unordered_map<string, uint32_t> word_count;
+  readVocab(vocabFile, word_count);
+  learnbpedirect(kNPairs, word_count);
 }
 
 };

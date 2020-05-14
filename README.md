@@ -1,12 +1,12 @@
 
-# fastBPE-win32
+# fastBPE-win
 
-Ugly add win32 support for fastBPE. It could also be compiled under linux.
+Ugly add win-x64 support for fastBPE. It could also be compiled under linux.
 
 ## Thanks
 Fix compat by [klauspost's mman project](https://github.com/klauspost/mman-win32) and [AShelly's unistd.h](https://stackoverflow.com/a/826027/5557571).
 
-## Release (win32)
+## Release (windows)
 ```
 # clone the repository
 git clont https://github.com/lomizandtyd/fastBPE
@@ -17,14 +17,20 @@ git clont https://github.com/lomizandtyd/fastBPE
 python.exe -m easy_install dist\fastBPE-0.1.1-py3.7-win-amd32.egg
 ```
 
-## Build for yourself (win32)
+## Build for yourself (windows)
 Need Visual Studio installed.
 
 1. Clone the project and cd the top directory
 2. Change the path of `vcvars64.bat` in `build_win32.bat` to your VS install path.
 3. Open cmd and run `build_win32.bat`, you'll get the executable `fast.exe` at `build\win32\fast.exe`.
 
--------------------------------
+## Updates
+1. Add support for learn bpe directly from vocabulary count.
+2. Change the separator of infile/outfile to TAB `\t`.
+3. Add support for large file in win64, re-compile codes with `//change readTextSlow -> readText; readText -> other dummy name`
+4. Add DLL export for C#.
+
+------------------------------
 # copy from original repository
 -------------------------------
 
@@ -50,6 +56,7 @@ The commands supported by fastBPE are:
 
 getvocab input1 [input2]             extract the vocabulary from one or two text files
 learnbpe nCodes input1 [input2]      learn BPE codes from one or two text files
+learnbpe_vocab nCodes vocab          learn BPE codes directly from vocabulary files
 applybpe output input codes [vocab]  apply BPE codes to a text file
 applybpe_stream codes [vocab]        apply BPE codes to stdin and outputs to stdout
 ```
